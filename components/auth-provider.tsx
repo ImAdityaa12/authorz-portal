@@ -65,9 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Clear cookie client-side as fallback
+      document.cookie = "auth_token=; path=/; max-age=0";
+    }
     setUser(null);
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (

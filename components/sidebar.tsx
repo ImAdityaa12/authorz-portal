@@ -151,7 +151,7 @@ export function Sidebar() {
       </AnimatePresence>
 
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-[260px] lg:min-h-screen bg-surface border-r border-border">
+      <aside className="hidden lg:flex lg:flex-col lg:w-[260px] lg:h-screen lg:sticky lg:top-0 bg-surface border-r border-border">
         <NavContent />
       </aside>
     </>
