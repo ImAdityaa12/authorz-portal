@@ -56,6 +56,8 @@ export default function AdminTicketDetail() {
   const [sending, setSending] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState("");
+  const [aiModel, setAiModel] = useState<string | null>(null);
+  const [aiError, setAiError] = useState("");
 
   useEffect(() => {
     fetch(`/api/tickets/${params.id}`)
@@ -96,15 +98,25 @@ export default function AdminTicketDetail() {
 
   const handleAiSuggest = async () => {
     setAiLoading(true);
-    const res = await fetch("/api/ai/suggest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticketId: params.id }),
-    });
+    setAiError("");
+    setAiModel(null);
 
-    if (res.ok) {
-      const data = await res.json();
-      setAiSuggestion(data.suggestion);
+    try {
+      const res = await fetch("/api/ai/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId: params.id }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAiSuggestion(data.suggestion);
+        setAiModel(data.model || null);
+      } else {
+        setAiError("Failed to generate suggestion. Please try again.");
+      }
+    } catch {
+      setAiError("Network error. Please check your connection.");
     }
     setAiLoading(false);
   };
@@ -268,12 +280,36 @@ export default function AdminTicketDetail() {
             </button>
           </div>
 
+          {aiError && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700"
+            >
+              {aiError}
+            </motion.div>
+          )}
+
           {aiSuggestion && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               className="mb-4"
             >
+              {aiModel && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                    aiModel === "fallback"
+                      ? "bg-zinc-100 text-zinc-600"
+                      : "bg-emerald-50 text-emerald-700"
+                  }`}>
+                    {aiModel === "fallback" ? "Rule-based" : `LLaMA 3.3 70B`}
+                  </span>
+                  {aiModel !== "fallback" && (
+                    <span className="text-[10px] text-zinc-400">via NVIDIA NIM</span>
+                  )}
+                </div>
+              )}
               <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 text-sm whitespace-pre-wrap leading-relaxed">
                 {aiSuggestion}
               </div>
@@ -281,6 +317,7 @@ export default function AdminTicketDetail() {
                 onClick={() => {
                   setReply(aiSuggestion);
                   setAiSuggestion("");
+                  setAiModel(null);
                 }}
                 className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
               >

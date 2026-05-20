@@ -35,10 +35,11 @@ A full-stack publishing management portal built for **BookLeaf Publishing**, ena
 - **Author Detail** - Full profile view with contact info, complete book portfolio, per-book royalty breakdown, and animated payment progress bar
 - **Ticket Management** - Filterable ticket queue (by status and priority) with full conversation view, status controls, and AI-suggested responses
 
-### AI-Powered Support
+### AI-Powered Support (NVIDIA LLaMA 3.3 70B)
 - **Auto-categorization** - Tickets are automatically classified into categories (Royalty Query, Book Status, Technical Issue, Account Update, General) based on content analysis
 - **Priority Detection** - Automatic priority assignment (Low, Medium, High, Urgent) using keyword-based heuristics
-- **Smart Response Suggestions** - Contextual reply generation that pulls from the author's actual book data, royalty figures, and production statuses to draft personalized responses
+- **Smart Response Suggestions** - Powered by NVIDIA NIM with Meta's LLaMA 3.3 70B Instruct model. The AI receives the full author profile (books, royalties, sales data) and ticket conversation history as context, generating accurate, personalized responses grounded in real data
+- **Graceful Fallback** - If the NVIDIA API key is not configured or the API is unavailable, the system falls back to a rule-based response generator that still uses author data
 
 ### Design & UX
 - Responsive layout with mobile sidebar drawer and desktop sticky sidebar
@@ -60,6 +61,7 @@ A full-stack publishing management portal built for **BookLeaf Publishing**, ena
 | **Animations** | Framer Motion | 12.x |
 | **Icons** | Phosphor Icons | 2.x |
 | **Auth (JWT)** | jose | 6.x |
+| **AI Model** | Meta LLaMA 3.3 70B Instruct (via NVIDIA NIM) | - |
 | **ID Generation** | uuid | 14.x |
 | **Linting** | ESLint + eslint-config-next | 9.x |
 
@@ -158,6 +160,7 @@ npm start
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `JWT_SECRET` | `bookleaf-secret-key-2024-change-in-production` | Secret key for JWT signing. Override in production. |
+| `NVIDIA_API_KEY` | _(none)_ | NVIDIA NIM API key for LLaMA 3.3 70B AI suggestions. Get one at [build.nvidia.com](https://build.nvidia.com/). Starts with `nvapi-`. If not set, the system uses rule-based fallback responses. |
 
 ---
 
@@ -398,26 +401,74 @@ Generate a contextual response suggestion for a ticket.
 
 ## AI-Powered Ticket System
 
-The AI suggestion engine works without any external API calls. It uses rule-based contextual generation:
+### Architecture
+
+The AI suggestion engine uses **NVIDIA NIM** with **Meta's LLaMA 3.3 70B Instruct** model, with an automatic fallback to rule-based generation if the API is unavailable.
+
+```
+Admin clicks "Generate Suggestion"
+        │
+        ▼
+  POST /api/ai/suggest
+        │
+        ├── NVIDIA_API_KEY set?
+        │     ├── YES ──> Build system prompt with author profile + book data
+        │     │           Build user prompt with ticket conversation history
+        │     │           Call NVIDIA NIM API (LLaMA 3.3 70B)
+        │     │           Return AI-generated response
+        │     │
+        │     └── NO ───> Use rule-based fallback generator
+        │
+        └── API call fails? ──> Fallback to rule-based generator
+```
 
 ### How It Works
 
-1. **Auto-Categorization** - When an author creates a ticket, the system scans the subject and message for keywords:
-   - Words like "royalty", "payment", "payout" map to `royalty_query`
-   - Words like "book", "publish", "production" map to `book_status`
-   - Words like "account", "profile", "phone" map to `account_update`
-   - Words like "error", "bug", "technical" map to `technical_issue`
+#### 1. Auto-Categorization (on ticket creation)
+When an author creates a ticket, keyword analysis classifies it:
+- "royalty", "payment", "payout" -> `royalty_query`
+- "book", "publish", "production" -> `book_status`
+- "account", "profile", "phone" -> `account_update`
+- "error", "bug", "technical" -> `technical_issue`
 
-2. **Priority Detection** - Keywords determine urgency:
-   - "urgent", "immediately", "critical" -> `urgent`
-   - "payment", "royalty", "delay", "not received" -> `high`
-   - "issue", "problem", "error" -> `medium`
-   - Everything else -> `low`
+#### 2. Priority Detection (on ticket creation)
+Keywords determine urgency:
+- "urgent", "immediately", "critical" -> `urgent`
+- "payment", "royalty", "delay", "not received" -> `high`
+- "issue", "problem", "error" -> `medium`
+- Everything else -> `low`
 
-3. **Response Suggestion** - When an admin clicks "Generate Suggestion", the system:
-   - Fetches the ticket and associated author data
-   - Based on the ticket category, generates a response that includes the author's actual pending royalty amounts, book production statuses, or standard professional templates
-   - The admin can review, edit, and send the suggestion
+#### 3. AI Response Suggestion (NVIDIA LLaMA 3.3 70B)
+When an admin clicks "Generate Suggestion", the system:
+
+1. **Builds a system prompt** containing:
+   - Role instructions (professional BookLeaf support agent)
+   - Complete author profile (name, email, phone, city, join date)
+   - Full book portfolio with royalties, sales, production status, availability
+   - Business rules (quarterly payouts, Rs 1,000 minimum threshold)
+
+2. **Builds a user prompt** containing:
+   - Ticket metadata (ID, subject, category, priority, status)
+   - Full conversation history with timestamps and sender labels
+
+3. **Calls NVIDIA NIM API** (`https://integrate.api.nvidia.com/v1/chat/completions`) with:
+   - Model: `meta/llama-3.3-70b-instruct`
+   - Temperature: `0.7`
+   - Max tokens: `1024`
+
+4. **Returns the response** with a model badge showing whether LLaMA or fallback was used
+
+The admin can review, optionally edit, and send the AI-generated reply.
+
+### NVIDIA API Configuration
+
+1. Visit [build.nvidia.com](https://build.nvidia.com/)
+2. Create an account and generate an API key (starts with `nvapi-`)
+3. Add to `.env.local`:
+   ```
+   NVIDIA_API_KEY=nvapi-your-key-here
+   ```
+4. Restart the dev server
 
 ---
 
